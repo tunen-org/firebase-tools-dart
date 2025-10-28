@@ -1,0 +1,97 @@
+name: Check Dart SDK Updates
+
+on:
+  schedule:
+    # Run daily at 9 AM UTC
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-dart-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get latest Dart stable version
+        id: dart-version
+        run: |
+          # Fetch latest stable Dart SDK version
+          LATEST_VERSION=$(curl -s https://storage.googleapis.com/dart-archive/channels/stable/release/latest/VERSION | jq -r '.version')
+          echo "latest=$LATEST_VERSION" >> $GITHUB_OUTPUT
+          echo "Latest Dart SDK version: $LATEST_VERSION"
+
+      - name: Get current Dart version
+        id: current-version
+        run: |
+          # Read the pinned version from .dart-version file
+          if [ -f .dart-version ]; then
+            DART_TAG=$(cat .dart-version | tr -d '[:space:]')
+          else
+            DART_TAG="stable"
+          fi
+          
+          # Get the actual SDK version number
+          docker pull dart:$DART_TAG
+          CURRENT_VERSION=$(docker run --rm dart:$DART_TAG dart --version 2>&1 | grep -oP 'Dart SDK version: \K[0-9]+\.[0-9]+\.[0-9]+')
+          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$DART_TAG" >> $GITHUB_OUTPUT
+          echo "Current Dart SDK version in image: $CURRENT_VERSION (tag: $DART_TAG)"
+
+      - name: Compare versions and trigger rebuild
+        if: steps.dart-version.outputs.latest != steps.current-version.outputs.current
+        run: |
+          echo "New Dart SDK version detected!"
+          echo "Current: ${{ steps.current-version.outputs.current }}"
+          echo "Latest: ${{ steps.dart-version.outputs.latest }}"
+          echo "Triggering Docker image rebuild..."
+
+      - name: Update .dart-version file
+        if: steps.dart-version.outputs.latest != steps.current-version.outputs.current
+        run: |
+          # Update to specific version tag
+          echo "${{ steps.dart-version.outputs.latest }}" > .dart-version
+          
+          # Also create tracking file
+          mkdir -p .dart-version-tracking
+          echo "${{ steps.dart-version.outputs.latest }}" > .dart-version-tracking/DART_VERSION
+          echo "Updated on: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> .dart-version-tracking/DART_VERSION
+
+      - name: Create Pull Request
+        if: steps.dart-version.outputs.latest != steps.current-version.outputs.current
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update Dart SDK to ${{ steps.dart-version.outputs.latest }}"
+          title: "Update Dart SDK to ${{ steps.dart-version.outputs.latest }}"
+          body: |
+            ## Dart SDK Update Detected
+            
+            A new stable version of the Dart SDK has been released.
+            
+            - **Previous version**: `${{ steps.current-version.outputs.current }}`
+            - **New version**: `${{ steps.dart-version.outputs.latest }}`
+            
+            ### Changes
+            - Updated `.dart-version` to pin Dart SDK `${{ steps.dart-version.outputs.latest }}`
+            
+            ### Docker Image Tags
+            After merging, the following image tags will be available:
+            - `ghcr.io/tunen-org/firebase-tools-dart:latest`
+            - `ghcr.io/tunen-org/firebase-tools-dart:${{ steps.dart-version.outputs.latest }}`
+            - `ghcr.io/tunen-org/firebase-tools-dart:dart-${{ steps.dart-version.outputs.latest }}`
+            
+            ### Release Notes
+            See: https://github.com/dart-lang/sdk/blob/main/CHANGELOG.md
+            
+            ---
+            _This PR was automatically created by the Dart SDK update checker._
+          branch: dart-sdk-update-${{ steps.dart-version.outputs.latest }}
+          delete-branch: true
+          labels: |
+            dependencies
+            automated

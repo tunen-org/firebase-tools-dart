@@ -1,5 +1,6 @@
 # Base image with Dart SDK
-FROM dart:latest
+ARG DART_VERSION=stable
+FROM dart:${DART_VERSION}
 
 # Install Java (required for Firebase emulators)
 RUN apt-get update && apt-get install -y openjdk-17-jdk
