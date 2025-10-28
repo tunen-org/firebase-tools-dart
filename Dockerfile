@@ -2,21 +2,8 @@
 ARG DART_VERSION=stable
 FROM dart:${DART_VERSION}
 
-# Install Java (required for Firebase emulators)
-RUN apt-get update && apt-get install -y openjdk-17-jdk
-RUN java -version
-
-# Install Node via NVM (required for Firebase CLI)
-ENV NODE_VERSION=20.10.0
-RUN apt install -y curl
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-ENV NVM_DIR=/root/.nvm
-RUN . "$NVM_DIR/nvm.sh" && nvm install ${NODE_VERSION}
-RUN . "$NVM_DIR/nvm.sh" && nvm use v${NODE_VERSION}
-RUN . "$NVM_DIR/nvm.sh" && nvm alias default v${NODE_VERSION}
-ENV PATH="/root/.nvm/versions/node/v${NODE_VERSION}/bin/:${PATH}"
-RUN node --version
-RUN npm --version
+# Install Java and Node.js (required for Firebase CLI and emulators)
+RUN apt-get update && apt-get install -y default-jdk nodejs npm && rm -rf /var/lib/apt/lists/*
 
 # Install Firebase CLI
 RUN npm install -g firebase-tools
