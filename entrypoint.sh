@@ -22,6 +22,7 @@ if [[ "$1" == "firebase" ]]; then
     exec "$@"
 fi
 
-# Otherwise, assume it's a test command and run with firebase emulators:exec
-echo "Starting Firebase emulators and executing: $@"
-exec firebase emulators:exec --only firestore --project demo-test "$@"
+# Otherwise, execute the command directly without wrapping in emulators:exec
+# This allows test scripts to manage their own emulator lifecycle
+echo "Executing: $@"
+exec "$@"
